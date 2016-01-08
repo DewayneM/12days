@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html><head>
+    <meta charset="UTF-8">
+    <base target="_top">
+    <title>shelf 2015</title>
+
+    <style type="text/css">
+        * { margin:0; padding:0; }
+        body {
+            background:#000;
+            width:100%;
+            height:100%;
+            overflow:hidden;
+        }
+        #banner {
+            display:block;
+            position:absolute;
+            z-index:1;
+            width:100%;
+            background-color: rgba(0,0,0,0.5);
+            color: #eee;
+            font: normal 11px/1.2 Helvetica, Arial, sans-serif;
+            text-align:center;
+            padding-top:1px;
+            padding-bottom:1px;
+        }
+        #banner a {
+            color:inherit;
+        }
+        #image {
+            display:block;
+            position:absolute;
+        }
+    </style>
+</head>
+
+<body>
+
+<div id="banner">
+    Kept books as of end-of-2015.  Most are pretty good.  Some shelves not shown.  Photos by <a href="http://www.maylikhoe.com/">May-Li Khoe</a>. <span id="zoom-help">&nbsp; <b>Click to zoom.</b></span>
+</div>
+
+<img id="image" src="shelf.jpg">
+<!-- huge version here: http://worrydream.com/Shelf2015/shelf-huge.jpg -->
+
+<script type="text/javascript">
+
+var isTouchDevice = !!("ontouchstart" in window);
+
+// metrics
+
+var fullWidth = 6320;
+var fullHeight = 4371;
+var aspect = fullWidth / fullHeight;
+
+var smallWidth, smallHeight, smallOffsetX;
+
+function updateMetrics () {
+    var windowAspect = window.innerWidth / window.innerHeight;
+    smallWidth = (aspect >= windowAspect) ? window.innerWidth : Math.floor(window.innerHeight * aspect);
+    smallHeight = Math.floor(smallWidth / aspect);
+    smallOffsetX = Math.max(0, Math.round(0.5 * (window.innerWidth - smallWidth)));
+}
+
+
+// state
+
+var zoomed = false;
+var imageX = 0;
+var imageY = 0;
+
+
+// transition
+
+var isAnimating = false;
+var animationDuration;  // ms
+var animationStartTime;
+
+var animToX = 0, animToY = 0;
+var animFromX = 0, animFromY = 0;
+
+
+// image
+
+var image = document.getElementById("image");
+
+
+// mouse interaction
+
+if (!isTouchDevice) {
+
+    image.onclick = function (e) {
+        setZoomed(!zoomed, e.offsetX, e.offsetY, e.shiftKey);
+    };
+
+    document.body.onwheel = function (e) {
+        scrollImage(e.deltaX, e.deltaY);
+        return false;
+    };
+
+    window.onresize = function () {
+        updateMetrics();
+        if (!zoomed) { setZoomInProgress(0); }
+    }
+}
+else {
+    document.getElementById("zoom-help").style.display = "none";
+    image.style.maxWidth = "100%";
+    document.body.overflow = "auto";
+}
+
+
+// keyboard interaction
+
+document.onkeydown = function (e) {
+    var k = e.keyCode;
+    if (k === 37) { scrollImage(-100, 0); }
+    if (k === 38) { scrollImage(0, -100); }
+    if (k === 39) { scrollImage(100, 0); }
+    if (k === 40) { scrollImage(0, 100); }
+};
+
+
+// image bounds
+
+function scrollImage (dx,dy) {
+    if (!zoomed || isAnimating) { return; }
+    var x = clip(imageX - dx, window.innerWidth - fullWidth - smallOffsetX, smallOffsetX);
+    var y = clip(imageY - dy, window.innerHeight - fullHeight, 0);
+    setImageBounds(x,y,fullWidth,fullHeight);
+}
+
+function setImageBounds (x,y,w,h) {
+    imageX = x;
+    imageY = y;
+    image.style.left   = Math.round(x) + "px";
+    image.style.top    = Math.round(y) + "px";
+    image.style.width  = Math.round(w) + "px";
+    image.style.height = Math.round(h) + "px";
+}
+
+
+// zoom
+
+function setZoomed (z, mx, my, isSlow) {
+    if (z == zoomed || isAnimating) { return; }
+    zoomed = z;
+    
+    animationDuration = isSlow ? 2000 : 300;  // ms
+    
+    animToX = clip(mx, 0, smallWidth);
+    animToY = clip(my, 0, smallHeight);
+    animFromX = imageX;
+    animFromY = imageY;
+    
+    startAnimating();
+    setZoomCursor(zoomed);
+}
+
+function setZoomCursor (z) {
+    image.style.cursor = z ? "zoom-out" : "zoom-in";
+}
+
+
+// animation
+
+function startAnimating () {
+    if (isAnimating) { return; }
+    isAnimating = true;
+    animationStartTime = 0;
+    window.requestAnimationFrame(tick);
+}
+
+function tick (t) {
+    if (!animationStartTime) { animationStartTime = t; }
+    var progress = clip( (t - animationStartTime) / animationDuration, 0, 1);
+    
+    if (zoomed) { setZoomInProgress(progress); }
+    else { setZoomOutProgress(1 - progress); }
+    
+    if (progress < 1) { window.requestAnimationFrame(tick); }
+    else { isAnimating = false; }
+}
+
+function setZoomInProgress (p) {
+    var w = lerp(smallWidth, fullWidth, p);
+    var h = lerp(smallHeight, fullHeight, p);
+    var x = -(w / smallWidth - 1) * animToX + smallOffsetX;
+    var y = -(h / smallHeight - 1) * animToY;
+
+    setImageBounds(x,y,w,h);
+}
+
+function setZoomOutProgress (p) {
+    var w = lerp(smallWidth, fullWidth, p);
+    var h = lerp(smallHeight, fullHeight, p);
+    var x = lerp(smallOffsetX, animFromX, p);
+    var y = lerp(0, animFromY, p);
+
+    setImageBounds(x,y,w,h);
+}
+
+
+// init
+
+if (!isTouchDevice) {
+    updateMetrics();
+    setZoomOutProgress(0);
+    setZoomCursor(false);
+}
+
+
+// util
+
+function clip (x,min,max) { return x < min ? min : x > max ? max : x; }
+function lerp (a,b,t) { return a + (b-a) * t; }
+
+</script>
+    
+</body></html>
